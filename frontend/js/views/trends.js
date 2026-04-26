@@ -31,10 +31,7 @@ function buildTrendsHTML(data) {
     html += `<h2 class="view-title">Trends &amp; Historical Analysis</h2>`;
     html += `<p class="view-subtitle">${hist.total_periods || 0} peak periods analyzed across ${hist.year_range || '2003-2025'}</p>`;
 
-    /* Key findings insight panel */
-    html += buildInsightPanel(data);
-
-    /* Outcome summary strip */
+    /* Outcome summary strip — top of page for immediate context */
     const outcomes = hist.outcomes || {};
     const totalPeriods = hist.total_periods || 0;
     const catastrophic = outcomes.catastrophic || 0;
@@ -66,6 +63,9 @@ function buildTrendsHTML(data) {
             </div>
         </div>
     `;
+
+    /* Key findings insight panel */
+    html += buildInsightPanel(data);
 
     /* Peak forecast error by year — the money chart */
     if (hist.error_by_year && Object.keys(hist.error_by_year).length > 0) {
