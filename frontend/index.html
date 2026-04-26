@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>ERCOT Grid Stress Analyzer</title>
+    <link rel="stylesheet" href="/css/styles.css?v=20260426">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>Grid Stress Analyzer</h1>
+        </div>
+        <nav class="tab-nav">
+            <a href="#live" class="tab active" data-view="live">Live</a>
+            <a href="#history" class="tab" data-view="history">History</a>
+            <a href="#trends" class="tab" data-view="trends">Trends</a>
+            <a href="#events" class="tab" data-view="events">Events</a>
+        </nav>
+        <div class="header-right">
+            <select class="grid-selector" disabled>
+                <option>ERCOT (more coming soon)</option>
+            </select>
+        </div>
+    </header>
+
+    <main id="app">
+        <!-- Views rendered here by app.js -->
+    </main>
+
+    <script src="/js/components/metric_strip.js?v=20260426"></script>
+    <script src="/js/components/alert_banner.js?v=20260426"></script>
+    <script src="/js/components/chart.js?v=20260426"></script>
+    <script src="/js/views/live.js?v=20260426"></script>
+    <script src="/js/views/history.js?v=20260426"></script>
+    <script src="/js/views/trends.js?v=20260426"></script>
+    <script src="/js/views/events.js?v=20260426"></script>
+    <script src="/js/app.js?v=20260426"></script>
+</body>
+</html>
