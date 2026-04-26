@@ -68,12 +68,15 @@ function buildLiveHTML(data) {
     /* ── 3. Metric strip ── */
     html += renderMetricStrip(data);
 
-    /* ── 4. Cause line ── */
+    /* ── 4. ML Predictions ── */
+    html += '<div id="predictions-strip"></div>';
+
+    /* ── 5. Cause line ── */
     if (data.cause_description) {
         html += `<div class="cause-line">${data.cause_description}</div>`;
     }
 
-    /* ── 5. Two-column: error decomposition + fuel mix ── */
+    /* ── 6. Two-column: error decomposition + fuel mix ── */
     const hasDecomp = data.error_decomposition && data.error_decomposition.components && data.error_decomposition.components.length > 0;
     const hasFuel = data.fuel_mix;
 
@@ -84,7 +87,7 @@ function buildLiveHTML(data) {
         html += '</div>';
     }
 
-    /* ── 6. Stress Score line chart — full width ── */
+    /* ── 7. Stress Score line chart — full width ── */
     const ts = data.score_timeseries || {};
     const tsCount = Object.keys(ts).length;
     if (tsCount > 1) {
@@ -99,7 +102,7 @@ function buildLiveHTML(data) {
         `;
     }
 
-    /* ── 7. Two-column: sparkline + grid detail ── */
+    /* ── 8. Two-column: sparkline + grid detail ── */
     html += `
         <div class="live-detail-section">
             <div class="live-detail-left">
@@ -122,10 +125,10 @@ function buildLiveHTML(data) {
         </div>
     `;
 
-    /* ── 8. Historical context panel ── */
+    /* ── 9. Historical context panel ── */
     html += buildHistoricalContextSection(data);
 
-    /* ── 9. Signal harvesting (compact) ── */
+    /* ── 10. Signal harvesting (compact) ── */
     html += '<div id="signal-harvest-panel"></div>';
 
     return html;
@@ -141,6 +144,7 @@ function drawLiveCharts(data) {
         drawLineChart('live-score-chart', ts, 'Score');
     }
     attachBarInteractivity();
+    loadPredictionsStrip();
     loadSignalHarvestPanel();
 }
 
@@ -235,6 +239,95 @@ function buildSignalHarvestHTML(stats) {
             </div>
             <div class="milestone-track"><div class="milestone-fill" style="width: ${fillPct}%"></div></div>
             <div class="milestone-labels">${dots}</div>
+        </div>
+    `;
+}
+
+/* ── Predictions ── */
+
+async function loadPredictionsStrip() {
+    const panel = document.getElementById('predictions-strip');
+    if (!panel) return;
+
+    let pred = null;
+    try {
+        const resp = await fetch('/api/ercot/predictions');
+        if (resp.ok) pred = await resp.json();
+    } catch { /* model may not be available */ }
+
+    if (!pred || pred.error || !panel.isConnected) {
+        panel.innerHTML = '';
+        return;
+    }
+
+    panel.innerHTML = buildPredictionsHTML(pred);
+}
+
+function buildPredictionsHTML(pred) {
+    const stressProb = pred.stress_probability || 0;
+    const stressColor = stressProb >= 0.5 ? 'var(--red)' : stressProb >= 0.2 ? 'var(--amber)' : 'var(--green)';
+    const stressLabel = stressProb >= 0.5 ? 'Elevated' : stressProb >= 0.2 ? 'Watch' : 'Low';
+
+    /* Compare our forecast to ERCOT's current forecast if available */
+    const ercotForecast = state.liveData ? state.liveData.forecast_mw : null;
+    const ercotActual = state.liveData ? state.liveData.actual_mw : null;
+
+    const horizons = [
+        { label: '+1 hour', mw: pred.demand_1h_mw },
+        { label: '+4 hours', mw: pred.demand_4h_mw },
+        { label: '+12 hours', mw: pred.demand_12h_mw },
+    ];
+
+    /* Context row: ERCOT's current numbers vs our prediction */
+    let contextHTML = '';
+    if (ercotForecast && ercotActual) {
+        const diff1h = pred.demand_1h_mw - ercotForecast;
+        const diffSign = diff1h >= 0 ? '+' : '';
+        const diffColor = Math.abs(diff1h) > 2000 ? 'var(--amber)' : 'var(--ink-3)';
+        contextHTML = `
+            <div class="pred-context">
+                <div class="pred-context-item">
+                    <span class="pred-context-label">ERCOT says now</span>
+                    <span class="pred-context-val">${formatNum(ercotActual)} MW actual · ${formatNum(ercotForecast)} MW forecast</span>
+                </div>
+                <div class="pred-context-item">
+                    <span class="pred-context-label">Our model vs ERCOT forecast</span>
+                    <span class="pred-context-val" style="color: ${diffColor}">${diffSign}${formatNum(diff1h)} MW at +1h</span>
+                </div>
+            </div>
+        `;
+    }
+
+    let items = '';
+    for (const h of horizons) {
+        items += `
+            <div class="pred-card">
+                <div class="pred-card-value">${formatNum(h.mw)}</div>
+                <div class="pred-card-unit">MW</div>
+                <div class="pred-card-label">${h.label}</div>
+            </div>
+        `;
+    }
+
+    items += `
+        <div class="pred-card pred-card-stress" style="border-color: ${stressColor}">
+            <div class="pred-card-value" style="color: ${stressColor}">${(stressProb * 100).toFixed(1)}%</div>
+            <div class="pred-card-unit" style="color: ${stressColor}">${stressLabel}</div>
+            <div class="pred-card-label">Stress Probability</div>
+        </div>
+    `;
+
+    return `
+        <div class="predictions-section">
+            <div class="predictions-header">
+                <div class="predictions-title-row">
+                    <span class="predictions-title">Our Model's Demand Forecast</span>
+                    <span class="predictions-badge">LSTM</span>
+                </div>
+                <div class="predictions-subtitle">What our model predicts ERCOT grid demand will be — trained on 5 years of historical load + weather data</div>
+            </div>
+            <div class="predictions-strip">${items}</div>
+            ${contextHTML}
         </div>
     `;
 }
@@ -386,7 +479,7 @@ function buildErrorDecomposition(data) {
 
     return `
         <div class="error-decomposition" data-components='${JSON.stringify(decomp.components.map(c => ({ label: c.label, mw: c.mw, pct: c.pct })))}'>
-            <div class="decomp-title">Why the Forecast Is Wrong</div>
+            <div class="decomp-title">Why ERCOT's Forecast Is Off</div>
             <div class="decomp-bar">${barSegments}</div>
             <div class="decomp-legend">${legendItems}</div>
         </div>

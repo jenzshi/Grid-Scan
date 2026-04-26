@@ -542,6 +542,131 @@ main {
 }
 
 /* ============================================================
+   ML PREDICTIONS
+   ============================================================ */
+.predictions-section {
+    background: linear-gradient(135deg, var(--blue-dim) 0%, var(--white) 100%);
+    border-left: 3px solid var(--blue);
+    border-radius: 0 6px 6px 0;
+    margin-top: 1.25rem;
+    padding: 1.25rem 1.5rem;
+}
+
+.predictions-header {
+    margin-bottom: 1rem;
+}
+
+.predictions-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.25rem;
+}
+
+.predictions-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--blue);
+}
+
+.predictions-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--blue);
+    background: rgba(29, 78, 216, 0.1);
+    border: 1px solid rgba(29, 78, 216, 0.25);
+    border-radius: 3px;
+    padding: 0.1rem 0.4rem;
+}
+
+.predictions-subtitle {
+    font-size: 0.72rem;
+    color: var(--ink-3);
+    line-height: 1.4;
+}
+
+.predictions-strip {
+    display: flex;
+    gap: 1rem;
+    align-items: stretch;
+    margin-bottom: 0.75rem;
+}
+
+.pred-card {
+    flex: 1;
+    background: var(--white);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0.9rem 1rem 0.7rem;
+    text-align: center;
+    transition: border-color 0.15s;
+}
+
+.pred-card:hover {
+    border-color: var(--blue);
+}
+
+.pred-card-stress {
+    border-width: 2px;
+}
+
+.pred-card-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.pred-card-unit {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.1rem;
+}
+
+.pred-card-label {
+    font-size: 0.7rem;
+    color: var(--ink-4);
+    margin-top: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.pred-context {
+    display: flex;
+    gap: 2rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--rule);
+}
+
+.pred-context-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.pred-context-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--ink-4);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pred-context-val {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
    SIGNAL HARVESTING / ML READINESS
    ============================================================ */
 .signal-harvest {

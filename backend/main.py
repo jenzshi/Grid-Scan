@@ -186,6 +186,7 @@ from backend.routes.trends import router as trends_router
 from backend.routes.history import router as history_router
 from backend.routes.fuel_mix import router as fuel_mix_router
 from backend.routes.export import router as export_router
+from backend.routes.predictions import router as predictions_router
 app.include_router(live_router)
 app.include_router(fingerprint_router)
 app.include_router(events_router)
@@ -193,6 +194,7 @@ app.include_router(trends_router)
 app.include_router(history_router)
 app.include_router(fuel_mix_router)
 app.include_router(export_router)
+app.include_router(predictions_router)
 
 
 def _seed_demo_events():

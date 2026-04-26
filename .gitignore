@@ -23,5 +23,9 @@ venv/
 CLAUDE.md
 PROJECT_OVERVIEW.md
 
+# ML artifacts
+data/cache/
+*.pt
+
 # Claude Code
 .claude/
