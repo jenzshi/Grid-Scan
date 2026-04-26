@@ -3,6 +3,8 @@
 # Thresholds for classification
 _OUTAGE_DELTA_SIGNIFICANT_MW = 1500.0
 _TEMP_DELTA_SIGNIFICANT_F = 5.0
+_WIND_SHORTFALL_SIGNIFICANT_MW = 1000.0
+_SOLAR_SHORTFALL_SIGNIFICANT_MW = 500.0
 
 
 def classify_cause(
@@ -35,6 +37,90 @@ def classify_cause(
     if demand_signal:
         return "demand_side"
     return "undetermined"
+
+
+def classify_cause_v2(decomposition: dict) -> str:
+    """
+    Multi-signal cause classification using full error decomposition.
+
+    Uses all available signal components to determine whether the
+    forecast error is demand-driven or supply-driven.
+
+    Args:
+        decomposition: Output dict from decompose_error.
+
+    Returns:
+        'supply_side', 'demand_side', 'mixed', or 'undetermined'.
+    """
+    supply_mw = _total_supply_contribution(decomposition)
+    demand_mw = decomposition.get("temperature_demand_mw", 0.0)
+    total = decomposition.get("total_error_mw", 0.0)
+
+    if total < 1.0:
+        return "undetermined"
+
+    supply_pct = supply_mw / total
+    demand_pct = demand_mw / total
+
+    if supply_pct >= 0.6:
+        return "supply_side"
+    if demand_pct >= 0.6:
+        return "demand_side"
+    if supply_pct >= 0.3 and demand_pct >= 0.3:
+        return "mixed"
+    return "undetermined"
+
+
+def classify_supply_subcause(decomposition: dict) -> str | None:
+    """
+    Identify the specific supply-side subcause from decomposition.
+
+    Only meaningful when the primary cause is supply_side or mixed.
+
+    Args:
+        decomposition: Output dict from decompose_error.
+
+    Returns:
+        'thermal_trip', 'wind_shortfall', 'solar_ramp',
+        'combined_renewable', or None if not supply-driven.
+    """
+    wind = decomposition.get("wind_shortfall_mw", 0.0)
+    solar = decomposition.get("solar_shortfall_mw", 0.0)
+    thermal = decomposition.get("thermal_outage_impact_mw", 0.0)
+
+    supply_total = wind + solar + thermal
+    if supply_total < 100.0:
+        return None
+
+    if thermal >= wind and thermal >= solar:
+        return "thermal_trip"
+
+    both_renewable = (
+        wind >= _WIND_SHORTFALL_SIGNIFICANT_MW
+        and solar >= _SOLAR_SHORTFALL_SIGNIFICANT_MW
+    )
+    if both_renewable:
+        return "combined_renewable"
+
+    if wind >= solar:
+        return "wind_shortfall"
+    return "solar_ramp"
+
+
+def _total_supply_contribution(decomposition: dict) -> float:
+    """
+    Sum all supply-side components from a decomposition.
+
+    Args:
+        decomposition: Output dict from decompose_error.
+
+    Returns:
+        Total supply-side MW.
+    """
+    wind = decomposition.get("wind_shortfall_mw", 0.0)
+    solar = decomposition.get("solar_shortfall_mw", 0.0)
+    thermal = decomposition.get("thermal_outage_impact_mw", 0.0)
+    return wind + solar + thermal
 
 
 def _pick_dominant(

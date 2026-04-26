@@ -30,6 +30,9 @@ async def poll_loop():
         get_current_load,
         get_reserve_status,
         get_thermal_outages,
+        get_wind_status,
+        get_solar_status,
+        get_fuel_mix,
     )
     from backend.data.weather_client import get_current_weather
     from backend.analysis.forecast_error import (
@@ -37,13 +40,21 @@ async def poll_loop():
         calculate_growth_rate,
         is_dangerous,
     )
+    from backend.analysis.classifier import classify_cause
     from backend.analysis.metrics import (
         prc_status,
         stress_score,
         reserve_headroom_pct,
     )
+    from backend.analysis.event_detector import (
+        detect_event,
+        check_event_resolution,
+        get_active_event_id,
+        get_active_event_peaks,
+    )
     from backend.storage.supabase_client import (
         save_snapshot,
+        save_event,
         get_recent_snapshots,
     )
 
@@ -52,6 +63,9 @@ async def poll_loop():
             load = get_current_load()
             reserves = get_reserve_status()
             outages = get_thermal_outages()
+            wind = get_wind_status()
+            solar = get_solar_status()
+            fuel = get_fuel_mix()
             weather = get_current_weather()
 
             error = calculate_error(load["forecast_mw"], load["actual_mw"])
@@ -78,9 +92,37 @@ async def poll_loop():
                 "reserve_price_adder": reserves["reserve_price_adder"],
                 "weather_temp_f": weather["temp_f"],
                 "stress_score": score,
+                "wind_actual_mw": wind["wind_actual_mw"],
+                "wind_forecast_mw": wind["wind_forecast_mw"],
+                "wind_shortfall_mw": wind["wind_shortfall_mw"],
+                "solar_actual_mw": solar["solar_actual_mw"],
+                "solar_forecast_mw": solar["solar_forecast_mw"],
+                "solar_shortfall_mw": solar["solar_shortfall_mw"],
+                "gas_generation_mw": fuel.get("gas_mw", 0.0),
+                "nuclear_generation_mw": fuel.get("nuclear_mw", 0.0),
+                "coal_generation_mw": fuel.get("coal_mw", 0.0),
+                "storage_mw": fuel.get("storage_mw", 0.0),
             }
 
             save_snapshot(snapshot)
+
+            # Event detection: classify cause for the snapshot
+            temp_delta = weather.get("temp_f", 0) - weather.get("forecast_temp_f", 0)
+            thermal_delta = outages["thermal_outage_mw"] - 3600.0
+            cause = classify_cause(
+                error_mw=error["error_mw"],
+                thermal_outage_delta_mw=thermal_delta,
+                weather_temp_delta_f=temp_delta,
+            )
+            snapshot["cause"] = cause
+
+            new_event = detect_event(snapshot, growth_rate)
+            if new_event:
+                save_event(new_event)
+
+            if check_event_resolution(snapshot, growth_rate):
+                logger.info("Event resolved — peaks: %s",
+                            get_active_event_peaks())
 
         except Exception:
             logger.exception("Poll loop error")
@@ -142,11 +184,15 @@ from backend.routes.fingerprint import router as fingerprint_router
 from backend.routes.events import router as events_router
 from backend.routes.trends import router as trends_router
 from backend.routes.history import router as history_router
+from backend.routes.fuel_mix import router as fuel_mix_router
+from backend.routes.export import router as export_router
 app.include_router(live_router)
 app.include_router(fingerprint_router)
 app.include_router(events_router)
 app.include_router(trends_router)
 app.include_router(history_router)
+app.include_router(fuel_mix_router)
+app.include_router(export_router)
 
 
 def _seed_demo_events():

@@ -379,30 +379,319 @@ main {
 .cause-line strong { color: var(--ink); font-weight: 600; }
 
 /* ============================================================
-   LIVE VIEW — TWO COLUMN GRID
+   LIVE VIEW — DUAL BARS (decomp + fuel mix side by side)
    ============================================================ */
-.live-grid {
+.live-dual-bars {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 2.5rem;
-    margin-bottom: 1.5rem;
+    gap: 2rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--rule);
 }
 
-.live-grid-chart,
-.live-grid-snapshot {
+/* (dual-charts replaced by live-detail-section) */
+
+/* ============================================================
+   ERROR DECOMPOSITION BAR
+   ============================================================ */
+.error-decomposition {
+    padding: 0;
+}
+
+.decomp-title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 0.75rem;
+}
+
+.decomp-bar {
+    display: flex;
+    height: 22px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.decomp-segment {
+    height: 100%;
+    min-width: 2px;
+    transition: opacity 0.15s, transform 0.15s;
+    position: relative;
+    transform-origin: bottom;
+}
+
+.decomp-segment:first-child {
+    border-radius: 2px 0 0 2px;
+}
+
+.decomp-segment:last-child {
+    border-radius: 0 2px 2px 0;
+}
+
+.decomp-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+    margin-top: 0.75rem;
+}
+
+.decomp-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--ink-2);
+    line-height: 1.4;
+}
+
+.decomp-legend-label {
     min-width: 0;
 }
 
+.decomp-legend-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.decomp-legend-mw {
+    font-family: var(--font-num);
+    font-weight: 700;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.decomp-legend-pct {
+    font-family: var(--font-num);
+    font-size: 0.75rem;
+    color: var(--ink-3);
+}
+
+.decomp-summary {
+    font-size: 0.875rem;
+    color: var(--ink-3);
+    margin-top: 0.625rem;
+    line-height: 1.6;
+}
+
+/* ============================================================
+   FUEL MIX BAR
+   ============================================================ */
+.fuel-mix-section {
+    padding: 0;
+}
+
+.fuel-mix-title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 0.75rem;
+}
+
+.fuel-mix-bar {
+    display: flex;
+    height: 22px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.fuel-mix-segment {
+    height: 100%;
+    min-width: 1px;
+    transition: opacity 0.15s, transform 0.15s;
+    transform-origin: bottom;
+}
+
+.fuel-mix-segment:first-child { border-radius: 2px 0 0 2px; }
+.fuel-mix-segment:last-child { border-radius: 0 2px 2px 0; }
+
+.fuel-mix-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    margin-top: 0.75rem;
+}
+
+.fuel-mix-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--ink-2);
+}
+
+.fuel-mix-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.fuel-mix-pct {
+    font-family: var(--font-num);
+    font-weight: 600;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   SIGNAL HARVESTING / ML READINESS
+   ============================================================ */
+.signal-harvest {
+    padding: 1.25rem 0 1rem;
+    border-top: 1px solid var(--rule);
+    margin-top: 1.5rem;
+}
+
+.signal-harvest-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.625rem;
+}
+
+.signal-harvest-left {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.signal-harvest-title {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+}
+
+.signal-harvest-badge {
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.125rem 0.375rem;
+    border-radius: 2px;
+}
+
+.signal-harvest-badge.insufficient { background: var(--surface-2); color: var(--ink-4); }
+.signal-harvest-badge.preliminary { background: var(--amber-dim); color: var(--amber); }
+.signal-harvest-badge.viable { background: var(--green-dim); color: var(--green); }
+.signal-harvest-badge.strong { background: var(--green-dim); color: var(--green); }
+.signal-harvest-badge.production_ready { background: var(--green-dim); color: var(--green); }
+
+.signal-harvest-nums {
+    display: flex;
+    gap: 1.25rem;
+    font-size: 0.6875rem;
+    color: var(--ink-4);
+    font-family: var(--font-num);
+}
+
+.signal-harvest-nums strong {
+    color: var(--ink-2);
+    font-weight: 700;
+}
+
+.milestone-track {
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 0.375rem;
+}
+
+.milestone-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.milestone-labels {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.milestone-label {
+    font-size: 0.5625rem;
+    color: var(--ink-4);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.milestone-label.reached { color: var(--green); font-weight: 600; }
+
+.milestone-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--rule);
+}
+
+.milestone-label.reached .milestone-dot { background: var(--green); }
+
+/* ============================================================
+   LIVE VIEW — DETAIL SECTION (charts + readings)
+   ============================================================ */
+.live-detail-section {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 2rem;
+    align-items: start;
+    padding: 1.5rem 0;
+    border-top: 2px solid var(--ink);
+    margin-top: 1.5rem;
+}
+
+.live-detail-left {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    min-width: 0;
+}
+
+.live-detail-right {
+    min-width: 0;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+}
+
+.live-chart-block {
+    min-width: 0;
+}
+
+.live-chart-header {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 0.125rem;
+}
+
+.live-chart-sub {
+    font-size: 0.6875rem;
+    color: var(--ink-4);
+    margin-bottom: 0.625rem;
+}
+
 .sparkline-container {
-    margin-top: 0.5rem;
+    margin-top: 0;
 }
 
 .sparkline-container canvas {
     display: block;
     width: 100%;
-    height: 160px;
+    height: 260px;
     background: var(--surface);
-    padding: 0.5rem;
 }
 
 .sparkline-legend {
@@ -411,6 +700,25 @@ main {
     margin-top: 0.5rem;
     font-size: 0.6875rem;
     color: var(--ink-3);
+}
+
+.sparkline-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.sparkline-legend-line {
+    display: inline-block;
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+}
+
+.sparkline-legend-line.dashed {
+    background: none !important;
+    border-top: 2px dashed var(--amber);
+    height: 0;
 }
 
 .sparkline-legend-item {
@@ -429,11 +737,11 @@ main {
 .dot-score { background: var(--ink); }
 .dot-error { background: var(--amber); }
 
-/* Readings table */
+/* Readings table — grid detail panel */
 .readings-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 0.5rem;
+    margin-top: 0.375rem;
 }
 
 .readings-table tr {
@@ -441,7 +749,7 @@ main {
 }
 
 .readings-table td {
-    padding: 0.5rem 0;
+    padding: 0.4375rem 0;
     font-size: 0.8125rem;
 }
 
@@ -455,38 +763,6 @@ main {
     font-family: var(--font-num);
     font-weight: 600;
     color: var(--ink);
-    font-variant-numeric: tabular-nums;
-}
-
-/* Context bar at bottom of live view */
-.live-context-bar {
-    display: flex;
-    gap: 2rem;
-    padding: 1rem 0;
-    border-top: 2px solid var(--ink);
-    border-bottom: 1px solid var(--rule);
-    margin-top: 0.5rem;
-}
-
-.live-context-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-}
-
-.live-context-label {
-    font-size: 0.5625rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink-4);
-}
-
-.live-context-value {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--ink-2);
-    font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
 }
 
@@ -525,6 +801,49 @@ main {
     font-weight: 600;
     padding: 0.375rem 0.875rem;
     border-radius: 2px;
+}
+
+/* ============================================================
+   CURRENT INSIGHT — History view top analysis
+   ============================================================ */
+.current-insight {
+    margin: 1.5rem 0 2rem;
+    padding: 1.5rem 2rem;
+    background: var(--surface);
+    border-left: 4px solid var(--ink);
+}
+
+.current-insight-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.current-insight-badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.6rem;
+    border: 1.5px solid;
+    border-radius: 2px;
+}
+
+.current-insight-headline {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.current-insight-paragraph {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--ink-2);
+    margin: 0.75rem 0 0;
+}
+
+.current-insight-paragraph:first-of-type {
+    margin-top: 0;
 }
 
 /* ============================================================
@@ -1279,13 +1598,24 @@ hr {
     .metric-item:nth-child(3) { border-right: none; }
     .metric-item:nth-child(4) { padding-left: 0; }
 
-    .live-grid {
+    .live-dual-bars {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+
+    .live-detail-section {
         grid-template-columns: 1fr;
     }
 
     .live-hero {
         flex-direction: column;
         gap: 1.5rem;
+    }
+
+    .signal-harvest-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
     }
 }
 

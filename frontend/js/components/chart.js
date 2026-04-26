@@ -58,7 +58,7 @@ function getChartState(canvas) {
    SPARKLINE — Live view 24-hour trend
    ============================================================ */
 
-function drawSparkline(canvas, scores, errors) {
+function drawSparkline(canvas, scores, errors, timestamps) {
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -69,7 +69,7 @@ function drawSparkline(canvas, scores, errors) {
 
     const w = rect.width;
     const h = rect.height;
-    const padding = 8;
+    const pad = { left: 40, right: 50, top: 16, bottom: 32 };
 
     if (scores && scores.length === 1) {
         ctx.fillStyle = getComputedColor('var(--ink)');
@@ -83,51 +83,176 @@ function drawSparkline(canvas, scores, errors) {
         return;
     }
 
-    storeChartState(canvas, { type: 'sparkline', scores, errors, w, h, padding });
+    storeChartState(canvas, { type: 'sparkline', scores, errors, timestamps, w, h, pad });
 
-    _renderSparklineFrame(ctx, scores, errors, w, h, padding, -1);
+    _renderSparklineFrame(ctx, scores, errors, timestamps, w, h, pad, -1);
     _attachSparklineEvents(canvas);
 }
 
-function _renderSparklineFrame(ctx, scores, errors, w, h, padding, hoverIdx) {
+function _sparklineScaleY(val, min, range, h, pad) {
+    return h - pad.bottom - ((val - min) / range) * (h - pad.top - pad.bottom);
+}
+
+function _sparklineX(i, n, pad, w) {
+    return pad.left + (i / (n - 1)) * (w - pad.left - pad.right);
+}
+
+function _renderSparklineFrame(ctx, scores, errors, timestamps, w, h, pad, hoverIdx) {
     ctx.clearRect(0, 0, w, h);
 
-    if (scores && scores.length > 1) {
-        _drawFilledLine(ctx, scores, w, h, padding, getComputedColor('var(--ink)'), 2);
+    const chartL = pad.left;
+    const chartR = w - pad.right;
+    const chartT = pad.top;
+    const chartB = h - pad.bottom;
+
+    /* Score Y-axis (left): 0-100 */
+    const sMin = 0;
+    const sMax = 100;
+    const sRange = 100;
+
+    /* Error Y-axis (right): 0% to next whole percent above max */
+    const rawEMax = errors && errors.length > 0 ? Math.max(...errors) : 0.05;
+    const eMax = Math.max(Math.ceil(rawEMax * 100), 1);
+    const eMin = 0;
+    const eRange = eMax;
+
+    /* Grid lines + Y-axis labels */
+    ctx.font = '10px sans-serif';
+    const ySteps = 4;
+    for (let i = 0; i <= ySteps; i++) {
+        const sVal = sMin + (sRange * i / ySteps);
+        const y = chartB - (i / ySteps) * (chartB - chartT);
+
+        ctx.strokeStyle = getComputedColor('var(--rule)');
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(chartL, y);
+        ctx.lineTo(chartR, y);
+        ctx.stroke();
+
+        /* Left: score */
+        ctx.fillStyle = getComputedColor('var(--ink)');
+        ctx.textAlign = 'right';
+        ctx.fillText(Math.round(sVal).toString(), chartL - 6, y + 3);
+
+        /* Right: error % */
+        const eVal = eMin + (eRange * i / ySteps);
+        ctx.fillStyle = getComputedColor('var(--amber)');
+        ctx.textAlign = 'left';
+        ctx.fillText(eVal.toFixed(1) + '%', chartR + 6, y + 3);
     }
+
+    /* X-axis time labels */
+    const n = scores ? scores.length : 0;
+    const tsLabels = timestamps && timestamps.length >= n ? timestamps : null;
+
+    if (n > 1) {
+        ctx.fillStyle = getComputedColor('var(--ink-3)');
+        ctx.font = '10px sans-serif';
+        const labelCount = Math.min(n, 6);
+        const step = Math.max(1, Math.floor((n - 1) / (labelCount - 1)));
+
+        for (let i = 0; i < n; i += step) {
+            const x = _sparklineX(i, n, pad, w);
+            const label = tsLabels ? formatChartLabel(tsLabels[i]) : `${i}`;
+            ctx.textAlign = i === 0 ? 'left' : 'center';
+            ctx.fillText(label, x, h - 6);
+        }
+        /* Always show last */
+        const lastIdx = n - 1;
+        if (lastIdx % step !== 0) {
+            const x = _sparklineX(lastIdx, n, pad, w);
+            const label = tsLabels ? formatChartLabel(tsLabels[lastIdx]) : `${lastIdx}`;
+            ctx.textAlign = 'right';
+            ctx.fillText(label, x, h - 6);
+        }
+    }
+
+    /* Draw error line (amber) — line only, no fill */
     if (errors && errors.length > 1) {
-        _drawFilledLine(ctx, errors, w, h, padding, getComputedColor('var(--amber)'), 1.5);
+        ctx.beginPath();
+        ctx.strokeStyle = getComputedColor('var(--amber)');
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([4, 3]);
+        for (let i = 0; i < errors.length; i++) {
+            const x = _sparklineX(i, errors.length, pad, w);
+            const y = _sparklineScaleY(errors[i] * 100, eMin, eRange, h, pad);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        /* Small dots on error line */
+        ctx.fillStyle = getComputedColor('var(--amber)');
+        for (let i = 0; i < errors.length; i++) {
+            const x = _sparklineX(i, errors.length, pad, w);
+            const y = _sparklineScaleY(errors[i] * 100, eMin, eRange, h, pad);
+            ctx.beginPath();
+            ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
-    if (hoverIdx >= 0 && scores && hoverIdx < scores.length) {
-        const x = padding + (hoverIdx / (scores.length - 1)) * (w - 2 * padding);
+    /* Draw score line (dark) — solid line with very subtle fill */
+    if (scores && scores.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = getComputedColor('var(--ink)');
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        for (let i = 0; i < n; i++) {
+            const x = _sparklineX(i, n, pad, w);
+            const y = _sparklineScaleY(scores[i], sMin, sRange, h, pad);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
 
-        /* Crosshair vertical line */
+        /* Subtle fill under score line */
+        const lastX = _sparklineX(n - 1, n, pad, w);
+        ctx.lineTo(lastX, chartB);
+        ctx.lineTo(chartL, chartB);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, chartT, 0, chartB);
+        grad.addColorStop(0, 'rgba(15, 23, 42, 0.06)');
+        grad.addColorStop(1, 'rgba(15, 23, 42, 0.01)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        /* Small dots on score line */
+        ctx.fillStyle = getComputedColor('var(--ink)');
+        for (let i = 0; i < n; i++) {
+            const x = _sparklineX(i, n, pad, w);
+            const y = _sparklineScaleY(scores[i], sMin, sRange, h, pad);
+            ctx.beginPath();
+            ctx.arc(x, y, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    /* Hover crosshair + enlarged dots */
+    if (hoverIdx >= 0 && scores && hoverIdx < scores.length) {
+        const x = _sparklineX(hoverIdx, n, pad, w);
+
         ctx.strokeStyle = getComputedColor('var(--ink-4)');
         ctx.lineWidth = 0.5;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
-        ctx.moveTo(x, padding);
-        ctx.lineTo(x, h - padding);
+        ctx.moveTo(x, chartT);
+        ctx.lineTo(x, chartB);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        /* Score dot */
-        const sMax = Math.max(...scores);
-        const sMin = Math.min(...scores);
-        const sRange = sMax - sMin || 1;
-        const sy = h - padding - ((scores[hoverIdx] - sMin) / sRange) * (h - 2 * padding);
+        const sy = _sparklineScaleY(scores[hoverIdx], sMin, sRange, h, pad);
         ctx.fillStyle = getComputedColor('var(--ink)');
         ctx.beginPath();
         ctx.arc(x, sy, 4, 0, Math.PI * 2);
         ctx.fill();
 
-        /* Error dot */
         if (errors && hoverIdx < errors.length) {
-            const eMax = Math.max(...errors);
-            const eMin = Math.min(...errors);
-            const eRange = eMax - eMin || 1;
-            const ey = h - padding - ((errors[hoverIdx] - eMin) / eRange) * (h - 2 * padding);
+            const ey = _sparklineScaleY(errors[hoverIdx] * 100, eMin, eRange, h, pad);
             ctx.fillStyle = getComputedColor('var(--amber)');
             ctx.beginPath();
             ctx.arc(x, ey, 4, 0, Math.PI * 2);
@@ -145,23 +270,26 @@ function _attachSparklineEvents(canvas) {
     canvas.addEventListener('mousemove', (e) => {
         const st = getChartState(canvas);
         if (!st || st.type !== 'sparkline') return;
-        const { scores, errors, w, h, padding } = st;
+        const { scores, errors, timestamps, w, h, pad } = st;
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const n = scores ? scores.length : 0;
         if (n < 2) return;
 
-        const idx = Math.round(((mx - padding) / (w - 2 * padding)) * (n - 1));
+        const idx = Math.round(((mx - pad.left) / (w - pad.left - pad.right)) * (n - 1));
         const clamped = Math.max(0, Math.min(n - 1, idx));
 
         const dpr = window.devicePixelRatio || 1;
         const ctx = canvas.getContext('2d');
         ctx.save();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        _renderSparklineFrame(ctx, scores, errors, w, h, padding, clamped);
+        _renderSparklineFrame(ctx, scores, errors, timestamps, w, h, pad, clamped);
         ctx.restore();
 
-        let tip = `<strong>Score: ${scores[clamped].toFixed(1)}</strong>`;
+        let timeLabel = timestamps && clamped < timestamps.length
+            ? formatChartLabel(timestamps[clamped]) : '';
+        let tip = timeLabel ? `<strong>${timeLabel}</strong><br>` : '';
+        tip += `Score: ${scores[clamped].toFixed(1)}`;
         if (errors && clamped < errors.length) {
             tip += `<br>Error: ${(errors[clamped] * 100).toFixed(2)}%`;
         }
@@ -171,12 +299,12 @@ function _attachSparklineEvents(canvas) {
     canvas.addEventListener('mouseleave', () => {
         const st = getChartState(canvas);
         if (!st || st.type !== 'sparkline') return;
-        const { scores, errors, w, h, padding } = st;
+        const { scores, errors, timestamps, w, h, pad } = st;
         const dpr = window.devicePixelRatio || 1;
         const ctx = canvas.getContext('2d');
         ctx.save();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        _renderSparklineFrame(ctx, scores, errors, w, h, padding, -1);
+        _renderSparklineFrame(ctx, scores, errors, timestamps, w, h, pad, -1);
         ctx.restore();
         hideTooltip();
     });

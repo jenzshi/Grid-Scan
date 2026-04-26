@@ -9,6 +9,8 @@ _COMPARISON_FIELDS = {
     "prc_collapsed": 1.0,
     "eea_level_reached": 1.0,
     "load_shed_mw": 0.5,
+    "wind_shortfall_mw": 1.0,
+    "renewable_outage_mw_peak": 0.8,
 }
 
 _MATCH_THRESHOLD = 0.4

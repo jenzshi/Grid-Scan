@@ -35,6 +35,9 @@ function buildHistoryHTML(data) {
     html += `<h2 class="view-title">Historical Context for Current Conditions</h2>`;
     html += `<p class="view-subtitle">${data.condition_description || ''}</p>`;
 
+    /* Current conditions insight — the key analysis */
+    html += buildCurrentInsight(data);
+
     /* Narrative lead paragraph */
     html += buildHistoryNarrative(data);
 
@@ -165,6 +168,32 @@ function renderPeriodDetail(period) {
 function formatOutcome(outcome) {
     if (!outcome) return '—';
     return outcome.replace('_', ' ');
+}
+
+function buildCurrentInsight(data) {
+    const insight = data.current_insight;
+    if (!insight || !insight.body || insight.body.length === 0) return '';
+
+    const riskColors = {
+        elevated: 'var(--red)',
+        watch: 'var(--amber)',
+        low: 'var(--green)',
+        unknown: 'var(--ink-3)',
+    };
+    const riskColor = riskColors[insight.risk_level] || riskColors.unknown;
+
+    let html = '<div class="current-insight">';
+    html += `<div class="current-insight-header">`;
+    html += `<span class="current-insight-badge" style="color: ${riskColor}; border-color: ${riskColor}">${(insight.risk_level || 'unknown').toUpperCase()}</span>`;
+    html += `<span class="current-insight-headline">${insight.headline}</span>`;
+    html += `</div>`;
+
+    for (const paragraph of insight.body) {
+        html += `<p class="current-insight-paragraph">${paragraph}</p>`;
+    }
+
+    html += '</div>';
+    return html;
 }
 
 function buildHistoryNarrative(data) {

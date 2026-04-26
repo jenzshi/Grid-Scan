@@ -181,9 +181,11 @@ def build_history_response(current: dict) -> dict:
 
     pattern_threads = _build_pattern_threads()
     counterfactual = _build_counterfactual(failures, survivals)
+    current_insight = _build_current_insight(current, similar, survival, factors)
 
     return {
         "condition_description": condition_desc,
+        "current_insight": current_insight,
         "survival_summary": summary,
         "similar_periods": [_format_period(p) for p in similar],
         "survival_rate": survival,
@@ -196,6 +198,231 @@ def build_history_response(current: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+def _build_current_insight(
+    current: dict,
+    similar: list[dict],
+    survival: dict,
+    factors: list[dict],
+) -> dict:
+    """
+    Generate a natural language analysis connecting current conditions
+    to the most similar historical periods.
+
+    Args:
+        current: Current conditions dict.
+        similar: List of similar historical periods.
+        survival: Survival rate breakdown.
+        factors: Identified survival factors.
+
+    Returns:
+        Dict with headline, body paragraphs, and risk_level.
+    """
+    if not similar:
+        return {
+            "headline": "Insufficient Historical Data",
+            "body": ["Not enough historical periods to draw meaningful comparisons."],
+            "risk_level": "unknown",
+        }
+
+    season = current.get("season", "unknown")
+    error_pct = current.get("peak_error_pct", 0) * 100
+    outage_mw = current.get("thermal_outage_mw", 0)
+    by_outcome = survival.get("by_outcome", {})
+    total = survival.get("total", 0)
+    failure_rate = survival.get("failure_rate", 0)
+
+    # Identify the closest match
+    closest = similar[0] if similar else {}
+    closest_year = closest.get("year", "?")
+    closest_outcome = closest.get("outcome", "normal")
+    closest_notes = closest.get("notes", "")
+
+    # Count serious outcomes
+    cat_count = by_outcome.get("catastrophic", 0)
+    nm_count = by_outcome.get("near_miss", 0)
+
+    paragraphs = []
+
+    # Paragraph 1: What the current conditions look like historically
+    paragraphs.append(_build_comparison_paragraph(
+        season, error_pct, outage_mw, closest, similar,
+    ))
+
+    # Paragraph 2: What the outcomes tell us
+    paragraphs.append(_build_outcome_paragraph(
+        total, cat_count, nm_count, failure_rate, closest_outcome,
+    ))
+
+    # Paragraph 3: What to watch — drawn from survival factors
+    watch_paragraph = _build_watch_paragraph(current, factors, similar)
+    if watch_paragraph:
+        paragraphs.append(watch_paragraph)
+
+    # Determine headline and risk level
+    risk_level = _assess_risk_level(failure_rate, error_pct, cat_count)
+    headline = _build_insight_headline(risk_level, season, closest)
+
+    return {
+        "headline": headline,
+        "body": paragraphs,
+        "risk_level": risk_level,
+    }
+
+
+def _build_comparison_paragraph(
+    season: str, error_pct: float, outage_mw: float,
+    closest: dict, similar: list[dict],
+) -> str:
+    """Build paragraph comparing current conditions to closest match."""
+    closest_year = closest.get("year", "?")
+    closest_error = (closest.get("peak_error_pct") or 0) * 100
+    closest_outage = closest.get("max_thermal_outage_mw") or 0
+    closest_notes = closest.get("notes") or ""
+
+    text = (
+        f"Current {season} conditions — {error_pct:.1f}% forecast error "
+        f"with {outage_mw:,.0f} MW of thermal outages — most closely "
+        f"resemble {closest_year}"
+    )
+    if closest_notes:
+        first_sentence = closest_notes.split(".")[0].strip()
+        text += f" ({first_sentence})"
+    text += (
+        f", which had {closest_error:.1f}% error and "
+        f"{closest_outage:,.0f} MW offline."
+    )
+
+    # Note how many periods are in the comparison set
+    years_seen = sorted(set(p.get("year") for p in similar if p.get("year")))
+    span = f"{years_seen[0]}–{years_seen[-1]}" if len(years_seen) >= 2 else ""
+    if span:
+        text += (
+            f" This analysis draws on {len(similar)} similar periods "
+            f"spanning {span}."
+        )
+
+    return text
+
+
+def _build_outcome_paragraph(
+    total: int, cat_count: int, nm_count: int,
+    failure_rate: float, closest_outcome: str,
+) -> str:
+    """Build paragraph about what historical outcomes tell us."""
+    safe_count = total - cat_count - nm_count
+
+    if cat_count > 0:
+        text = (
+            f"Of the {total} comparable periods, {cat_count} ended in "
+            f"catastrophic failure requiring rolling blackouts"
+        )
+        if nm_count > 0:
+            text += f" and {nm_count} became near-misses"
+        text += (
+            f". That means conditions like today have a "
+            f"{failure_rate * 100:.0f}% historical escalation rate. "
+        )
+        if safe_count > 0:
+            text += (
+                f"However, {safe_count} similar periods resolved safely — "
+                f"the outcome is not predetermined."
+            )
+    elif nm_count > 0:
+        text = (
+            f"No comparable period has resulted in catastrophic failure, "
+            f"but {nm_count} of {total} became near-misses requiring "
+            f"emergency action. "
+            f"The remaining {safe_count} resolved without incident."
+        )
+    else:
+        text = (
+            f"All {total} comparable historical periods resolved safely. "
+            f"Current conditions fall within the range that ERCOT has "
+            f"consistently managed without emergency action."
+        )
+
+    return text
+
+
+def _build_watch_paragraph(
+    current: dict, factors: list[dict], similar: list[dict],
+) -> str | None:
+    """Build paragraph about what to watch based on survival factors."""
+    if not factors:
+        return None
+
+    parts = []
+
+    # Find the top factor
+    top = factors[0]
+    parts.append(
+        f"The single biggest differentiator between historical failures "
+        f"and survivals: {top['description'][0].lower()}{top['description'][1:]}."
+    )
+
+    # Add current-condition-specific warning
+    error_pct = current.get("peak_error_pct", 0) * 100
+    outage_mw = current.get("thermal_outage_mw", 0)
+
+    # Compare current values to failure/survival averages from similar periods
+    failures = [p for p in similar if p.get("outcome") in ("catastrophic", "near_miss")]
+    survivals = [p for p in similar if p.get("outcome") in ("managed", "normal")]
+
+    if failures and survivals:
+        fail_errors = _extract_values(failures, "peak_error_pct")
+        surv_errors = _extract_values(survivals, "peak_error_pct")
+        if fail_errors and surv_errors:
+            fail_avg = sum(fail_errors) / len(fail_errors) * 100
+            surv_avg = sum(surv_errors) / len(surv_errors) * 100
+            if error_pct >= fail_avg:
+                parts.append(
+                    f"Current forecast error ({error_pct:.1f}%) is at or above "
+                    f"the average of periods that ended badly ({fail_avg:.1f}%) "
+                    f"— this warrants close monitoring."
+                )
+            elif error_pct > surv_avg:
+                parts.append(
+                    f"Current forecast error ({error_pct:.1f}%) is between the "
+                    f"survival average ({surv_avg:.1f}%) and failure average "
+                    f"({fail_avg:.1f}%) — in an ambiguous zone where outcome "
+                    f"depends on response speed."
+                )
+            else:
+                parts.append(
+                    f"Current forecast error ({error_pct:.1f}%) is below the "
+                    f"survival average ({surv_avg:.1f}%), which is favorable."
+                )
+
+    return " ".join(parts)
+
+
+def _assess_risk_level(
+    failure_rate: float, error_pct: float, cat_count: int,
+) -> str:
+    """Determine risk level from historical comparison."""
+    if cat_count > 0 and failure_rate > 0.2:
+        return "elevated"
+    if cat_count > 0 or failure_rate > 0.1:
+        return "watch"
+    if error_pct > 5.0:
+        return "watch"
+    return "low"
+
+
+def _build_insight_headline(
+    risk_level: str, season: str, closest: dict,
+) -> str:
+    """Build the insight section headline."""
+    closest_year = closest.get("year", "")
+    closest_outcome = closest.get("outcome", "normal")
+
+    if risk_level == "elevated":
+        return f"Elevated Risk — Conditions Echo Historical Failures"
+    if risk_level == "watch":
+        return f"Watch — Similar Conditions Have Escalated Before"
+    return f"Low Risk — Historical Precedent Favors Safe Resolution"
+
 
 def _build_pattern_threads() -> list[dict]:
     """

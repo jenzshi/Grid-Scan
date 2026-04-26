@@ -50,6 +50,52 @@ def get_thermal_outages() -> dict:
         raise ERCOTFetchError(f"Failed to fetch thermal outages: {exc}") from exc
 
 
+def get_wind_status() -> dict:
+    """
+    Fetch current wind generation vs forecast.
+
+    Returns:
+        Dict with wind_actual_mw, wind_forecast_mw, wind_shortfall_mw.
+    """
+    if MOCK_MODE:
+        return _mock_wind_status()
+    try:
+        return _live_wind_status()
+    except Exception as exc:
+        raise ERCOTFetchError(f"Failed to fetch wind status: {exc}") from exc
+
+
+def get_solar_status() -> dict:
+    """
+    Fetch current solar generation vs forecast.
+
+    Returns:
+        Dict with solar_actual_mw, solar_forecast_mw, solar_shortfall_mw.
+    """
+    if MOCK_MODE:
+        return _mock_solar_status()
+    try:
+        return _live_solar_status()
+    except Exception as exc:
+        raise ERCOTFetchError(f"Failed to fetch solar status: {exc}") from exc
+
+
+def get_fuel_mix() -> dict:
+    """
+    Fetch current generation by fuel type.
+
+    Returns:
+        Dict with gas_mw, coal_mw, nuclear_mw, wind_mw, solar_mw,
+        storage_mw, other_mw.
+    """
+    if MOCK_MODE:
+        return _mock_fuel_mix()
+    try:
+        return _live_fuel_mix()
+    except Exception as exc:
+        raise ERCOTFetchError(f"Failed to fetch fuel mix: {exc}") from exc
+
+
 def get_operations_messages(hours_back: int = 24) -> list[dict]:
     """Fetch ERCOT operational messages for response tracking."""
     if MOCK_MODE:
@@ -228,6 +274,135 @@ def _find_column(df, candidates: list[str]) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Live implementations — wind, solar, fuel mix
+# ---------------------------------------------------------------------------
+
+def _live_wind_status() -> dict:
+    """Fetch wind actual vs forecast from gridstatus."""
+    ercot = _get_ercot()
+
+    rtsc = ercot.get_real_time_system_conditions(date="latest")
+    if rtsc is None or rtsc.empty:
+        raise ERCOTFetchError("No real-time system conditions data for wind")
+
+    row = rtsc.iloc[-1]
+    actual = float(row.get("Current Wind Output", 0))
+    forecast = actual  # fallback
+
+    try:
+        wf = ercot.get_wind_forecast(date="latest")
+        if wf is not None and not wf.empty:
+            now = datetime.now(timezone.utc)
+            diffs = abs(wf["Interval Start"] - now)
+            closest = diffs.idxmin()
+            forecast = float(wf.loc[closest, "System Total"])
+    except Exception:
+        logger.warning("Could not fetch wind forecast, using actual as fallback")
+
+    shortfall = max(forecast - actual, 0)
+    return {
+        "wind_actual_mw": round(actual, 1),
+        "wind_forecast_mw": round(forecast, 1),
+        "wind_shortfall_mw": round(shortfall, 1),
+    }
+
+
+def _live_solar_status() -> dict:
+    """Fetch solar actual vs forecast from gridstatus."""
+    ercot = _get_ercot()
+
+    rtsc = ercot.get_real_time_system_conditions(date="latest")
+    if rtsc is None or rtsc.empty:
+        raise ERCOTFetchError("No real-time system conditions data for solar")
+
+    row = rtsc.iloc[-1]
+    actual = float(row.get("Current Solar Output", 0))
+    forecast = actual
+
+    try:
+        sf = ercot.get_solar_forecast(date="latest")
+        if sf is not None and not sf.empty:
+            now = datetime.now(timezone.utc)
+            diffs = abs(sf["Interval Start"] - now)
+            closest = diffs.idxmin()
+            forecast = float(sf.loc[closest, "System Total"])
+    except Exception:
+        logger.warning("Could not fetch solar forecast, using actual as fallback")
+
+    shortfall = max(forecast - actual, 0)
+    return {
+        "solar_actual_mw": round(actual, 1),
+        "solar_forecast_mw": round(forecast, 1),
+        "solar_shortfall_mw": round(shortfall, 1),
+    }
+
+
+def _live_fuel_mix() -> dict:
+    """Fetch current generation by fuel type from gridstatus."""
+    ercot = _get_ercot()
+
+    try:
+        fm = ercot.get_fuel_mix(date="latest")
+        if fm is not None and not fm.empty:
+            row = fm.iloc[-1]
+            return _extract_fuel_mix(row)
+    except Exception:
+        logger.warning("Could not fetch fuel mix from get_fuel_mix")
+
+    return _default_fuel_mix()
+
+
+def _extract_fuel_mix(row) -> dict:
+    """
+    Extract fuel mix MW values from a gridstatus fuel mix row.
+
+    Args:
+        row: A pandas Series from the fuel mix DataFrame.
+
+    Returns:
+        Dict with gas_mw, coal_mw, nuclear_mw, wind_mw, solar_mw,
+        storage_mw, other_mw.
+    """
+    def _get(col_substr):
+        for col in row.index:
+            if col_substr.lower() in col.lower():
+                return float(row[col])
+        return 0.0
+
+    gas = _get("Gas")
+    coal = _get("Coal")
+    nuclear = _get("Nuclear")
+    wind = _get("Wind")
+    solar = _get("Solar")
+    storage = _get("Storage") + _get("Battery")
+    total = sum([gas, coal, nuclear, wind, solar, storage])
+    other = max(float(row.get("Total", total)) - total, 0.0)
+
+    return {
+        "gas_mw": round(gas, 1),
+        "coal_mw": round(coal, 1),
+        "nuclear_mw": round(nuclear, 1),
+        "wind_mw": round(wind, 1),
+        "solar_mw": round(solar, 1),
+        "storage_mw": round(storage, 1),
+        "other_mw": round(other, 1),
+    }
+
+
+def _default_fuel_mix() -> dict:
+    """Return zeroed fuel mix when data is unavailable."""
+    return {
+        "gas_mw": 0.0,
+        "coal_mw": 0.0,
+        "nuclear_mw": 0.0,
+        "wind_mw": 0.0,
+        "solar_mw": 0.0,
+        "storage_mw": 0.0,
+        "other_mw": 0.0,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Mock implementations — realistic stressed-afternoon scenario
 # ---------------------------------------------------------------------------
 
@@ -257,6 +432,43 @@ def _mock_reserve_status() -> dict:
 def _mock_thermal_outages() -> dict:
     """Simulate typical summer thermal outages."""
     return {"thermal_outage_mw": round(random.uniform(2500, 5000), 1)}
+
+
+def _mock_wind_status() -> dict:
+    """Simulate wind underperforming forecast — typical afternoon shortfall."""
+    forecast = round(random.uniform(16000, 20000), 1)
+    actual = round(forecast * random.uniform(0.60, 0.80), 1)
+    shortfall = round(forecast - actual, 1)
+    return {
+        "wind_actual_mw": actual,
+        "wind_forecast_mw": forecast,
+        "wind_shortfall_mw": shortfall,
+    }
+
+
+def _mock_solar_status() -> dict:
+    """Simulate solar slightly below forecast — cloud cover or haze."""
+    forecast = round(random.uniform(7000, 10000), 1)
+    actual = round(forecast * random.uniform(0.80, 0.95), 1)
+    shortfall = round(max(forecast - actual, 0), 1)
+    return {
+        "solar_actual_mw": actual,
+        "solar_forecast_mw": forecast,
+        "solar_shortfall_mw": shortfall,
+    }
+
+
+def _mock_fuel_mix() -> dict:
+    """Simulate typical ERCOT afternoon generation mix."""
+    return {
+        "gas_mw": round(random.uniform(32000, 38000), 1),
+        "coal_mw": round(random.uniform(6000, 9000), 1),
+        "nuclear_mw": round(random.uniform(4800, 5200), 1),
+        "wind_mw": round(random.uniform(12000, 16000), 1),
+        "solar_mw": round(random.uniform(6000, 9000), 1),
+        "storage_mw": round(random.uniform(1000, 3000), 1),
+        "other_mw": round(random.uniform(500, 1500), 1),
+    }
 
 
 def _mock_operations_messages(hours_back: int) -> list[dict]:
