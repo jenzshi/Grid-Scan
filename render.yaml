@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: grid-scan-api
+    runtime: python
+    repo: https://github.com/jenzshi/Grid-Scan.git
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: POLL_INTERVAL_SECONDS
+        value: "300"
+      - key: MOCK_MODE
+        value: "true"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+    plan: free
+    healthCheckPath: /api/ercot/live
