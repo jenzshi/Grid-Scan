@@ -22,9 +22,8 @@ def get_current_weather() -> dict:
     try:
         return _live_current_weather()
     except Exception as exc:
-        raise WeatherFetchError(
-            f"Failed to fetch weather data: {exc}"
-        ) from exc
+        logger.warning("Weather fetch failed, using fallback: %s", exc)
+        return _mock_current_weather()
 
 
 def get_forecast_weather() -> dict:
@@ -34,9 +33,8 @@ def get_forecast_weather() -> dict:
     try:
         return _live_forecast_weather()
     except Exception as exc:
-        raise WeatherFetchError(
-            f"Failed to fetch forecast weather: {exc}"
-        ) from exc
+        logger.warning("Forecast weather fetch failed, using fallback: %s", exc)
+        return _mock_forecast_weather()
 
 
 def _live_current_weather() -> dict:
